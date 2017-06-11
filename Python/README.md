@@ -7,7 +7,7 @@ Script for k-means clustering of large sets of compounds (millions).
 How it works?:  
 
 * Calculation of Morgan fingerprints
-* Fitting of PCA model on smaller randomly selected set of compounds
+* Fitting of PCA model on smaller randomly selected set of compounds (size set with `--pca_train_size`)
 * Transforming all FPs to fitted PCA space
 * [Mini Batch K-Means clustering](http://scikit-learn.org/stable/modules/generated/sklearn.cluster.MiniBatchKMeans.html)
 
