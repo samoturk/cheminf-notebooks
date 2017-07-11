@@ -27,13 +27,13 @@ def arg_parser():
     parser = argparse.ArgumentParser(description='K-means clustering of large sets of compounds with intermediate PCA step. \
                                                  Creates 3 files: infile.fp.gz, infile.pca_train_sample.fp.gz and results file \
                                                  infile.cluster.csv')
-    parser.add_argument('-i', '--infile', help = "Input smi.gz file to cluster.")
-    parser.add_argument('-n', '--n_clusters', help = "Number of clusters.", type=int)
-    parser.add_argument('-p', '--pca_train_size', help = "Size of training set for PCA (randomly selected from input).", type=int)
-    parser.add_argument('-j', '--jobs', default = 1, help = "Number of cores to use for FP calculation. Default: 1", type=int)
-    parser.add_argument('-c', '--pca_components', default = 10, help = "Number of PCA components to calculate. Default: 10", type=int)
-    parser.add_argument('-r', '--radius', default = 1, help = "Morgan fingerprint bit radius. Default: 1", type=int)
-    parser.add_argument('-b', '--bit_length', default = 1024, help = "Morgan fingerprint bit length. Default: 1024", type=int)
+    parser.add_argument('-i', '--infile', required=True, help="Input smi.gz file to cluster.")
+    parser.add_argument('-n', '--n_clusters', help="Number of clusters.", type=int)
+    parser.add_argument('-p', '--pca_train_size', help="Size of training set for PCA (randomly selected from input).", type=int)
+    parser.add_argument('-j', '--jobs', default = 1, help="Number of cores to use for FP calculation. Default: 1", type=int)
+    parser.add_argument('-c', '--pca_components', default=10, help="Number of PCA components to calculate. Default: 10", type=int)
+    parser.add_argument('-r', '--radius', default=1, help = "Morgan fingerprint bit radius. Default: 1", type=int)
+    parser.add_argument('-b', '--bit_length', default=1024, help="Morgan fingerprint bit length. Default: 1024", type=int)
     return parser
 
 if __name__ == "__main__":
@@ -100,7 +100,7 @@ if __name__ == "__main__":
             [np.fromstring(x.split()[0], dtype=np.uint8) - ord('0') for x in lines[processed:processed + b_size]])
         X_clustering += list(pca.transform(X_pca))
         processed += b_size
-
+    X_clustering = np.array(X_clustering)
     # Perform clustering
     print('Performing clustering.')
     clust_pc = MiniBatchKMeans(n_clusters=args.n_clusters, batch_size=args.n_clusters)
