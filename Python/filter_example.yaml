@@ -1,0 +1,30 @@
+properties:
+# Accepts any rdkit descriptor
+# Format: descriptor: min - max
+    MolWt: 60 - 450
+#    TPSA
+#    FractionCSP3
+    HeavyAtomCount: 5 - 40
+#    NumAliphaticCarbocycles
+#    NumAliphaticHeterocycles
+#    NumAliphaticRings
+#    NumAromaticCarbocycles
+#    NumAromaticHeterocycles
+#    NumAromaticRings
+    NumHAcceptors: 0 - 10
+    NumHDonors: 0 - 5
+    NumHeteroatoms: 1 - 10
+#    NumRotatableBonds
+#    NumSaturatedCarbocycles
+#    NumSaturatedHeterocycles
+#    NumSaturatedRings
+    RingCount: 0 - 5
+    MolLogP: 0 - 4
+#    MolMR
+    FakeDesc: 0 - 1
+
+structure_filters:
+    - PAINS
+
+custom_smarts_filters:
+    - "[*]"

@@ -1,8 +1,8 @@
 # Collection of useful cheminformatics scripts
-### anymol2vina.py
+### anymol2vina.py (Python2)
 Script that automatically docks molecules with Autodock Vina.
 
-### PCA-k-means.py
+### PCA-k-means.py (Python3)
 Script for k-means clustering of large sets of compounds (millions).  
 How it works?:  
 
@@ -40,3 +40,6 @@ optional arguments:
   -b BIT_LENGTH, --bit_length BIT_LENGTH
                         Morgan fingerprint bit length. Default: 1024
 ```
+
+### prepare_mols.py (Python3)
+Script for filtering of molecules based on MW, logP, PAINS, etc and generating 3d confs.
