@@ -3,10 +3,12 @@
 __author__ = "Samo Turk"
 __license__ = "BSD 3-clause"
 
-import sys
+import timeit
+from itertools import chain, islice
 import argparse
 from rdkit import Chem
 from rdkit.Chem import Descriptors, PropertyMol, SaltRemover
+from rdkit.Chem.FilterCatalog import *
 from rdkit.Chem import AllChem
 import yaml
 from joblib import Parallel, delayed
@@ -15,20 +17,20 @@ from joblib import Parallel, delayed
 class PropertyFilter(object):
     """PropertyFilter class partially parses config and initiates relevant descriptors"""
 
-    def __init__(self, properties, atoms):
-        self.props = properties
-        self.atoms = atoms
+    def __init__(self, filters, catalog):
+        self.props = filters['properties']
+        self.atoms = filters['allowed_atoms']
+        self.catalog = catalog
         self.descriptors = self._init_descriptors(self.props)
-        print('Following descriptors will be used for filtering:')
+        print('The following descriptors will be used for filtering:')
         for desc in self.descriptors:
-            print('%s: %f - %f' %(desc, self.descriptors[desc][1], self.descriptors[desc][2]))
-        print('Following atoms are allowed: %s' %(', '.join(self.atoms)))
+            print('    %s: %0.2f - %0.2f' %(desc, self.descriptors[desc][1], self.descriptors[desc][2]))
+        print('The following atoms are allowed: %s' %(', '.join(self.atoms)))
 
     def _init_descriptors(self, props):
         all_descs = dict(Descriptors._descList)
         descs = {}
         for prop in props:
-            print(prop)
             if prop in all_descs:
                 try:
                     s = props[prop].split(' - ')
@@ -66,23 +68,45 @@ class PropertyFilter(object):
         # If all passes
         return True
 
-    def filter_mol(self, mol):
-        if self.filter_props(mol) & self.check_atoms(mol):
-            return True
-        else:
+    def struct_filter(self, mol):
+        if self.catalog.GetFirstMatch(mol):
             return False
+        else:
+            return True
+
+    def filter_mol(self, mol):
+        # Start with the fastest operation
+        if not self.check_atoms(mol):
+            return False
+        if not self.filter_props(mol):
+            return False
+        if self.catalog:
+            if not self.struct_filter(mol):
+                return False
+        # If all pass, then return True
+        return True
 
 
 remover = SaltRemover.SaltRemover()
 
+def _prepare_catalog(filters):
+    if 'structure_filters' not in filters:  # structure filters section missing
+        return None, None
+    if len(filters['structure_filters']) == 0:  # no filters listed
+        return None, None
+    params = FilterCatalogParams()
+    catalog_names = []
+    for f in filters['structure_filters']:
+        if f in FilterCatalogParams.FilterCatalogs.names:
+            params.AddCatalog(FilterCatalogParams.FilterCatalogs.names[f])
+            catalog_names.append(f)
+    catalog = FilterCatalog(params)
+    return catalog, catalog_names
 
 def _parallel_filter(mol, prop_filter, filters):
     """Helper function for joblib jobs
     """
     if mol is not None:
-        #smiles = Chem.MolToSmiles(mol)
-        #mol = Chem.MolFromSmiles(smiles)
-
         # Remove salts by default except explicitly requested not to
         if 'remove_salts' in filters:
             if filters['remove_salts'] is False:
@@ -131,19 +155,40 @@ def _get_supplier(file_name):
             suppl = _read_smi(mols_file)
     return suppl
 
+def _get_chunks(iterable, size):
+    iterator = iter(iterable)
+    for first in iterator:
+        yield chain([first], islice(iterator, size - 1))
 
 def do_filter(args):
     suppl = _get_supplier(args.in_file)
     filters = yaml.load(open(args.filter_file))
-    prop_filter = PropertyFilter(filters['properties'], filters['allowed_atoms'])
-    result = Parallel(n_jobs=args.n_jobs, verbose=1)(delayed(_parallel_filter)(PropertyMol.PropertyMol(mol),
-                                                                               prop_filter, filters) for mol in suppl)
-    print(len(result))
+    catalog, catalog_names = _prepare_catalog(filters)
+    prop_filter = PropertyFilter(filters, catalog)
+    if catalog_names:
+        print('Structure filters: %s' % (', '.join(catalog_names)))
+
+    # Processing in chunks so we don't consume all memory
+    chunk_size = args.chunk_size
+    chunks = _get_chunks(suppl, chunk_size)
     w = Chem.SDWriter(args.out_file)
-    for m in result:
-        if m is not None:
-            w.write(m)
+    processed = 0
+    saved = 0
+    start = timeit.default_timer()
+    print('Starting with filtering...')
+    for chunk in chunks:
+        result = Parallel(n_jobs=args.n_jobs, verbose=0)(delayed(_parallel_filter)(PropertyMol.PropertyMol(mol),
+                                                                                   prop_filter, filters) for mol in chunk)
+        for i, m in enumerate(result):
+            if m is not None:
+                saved += 1
+                w.write(m)
+        elapsed = (timeit.default_timer() - start)/60
+        processed += len(result)
+        print('Processed: %i       | elapsed %0.2f minutes   \r' % (processed, elapsed), end='\r')
     w.close()
+    print('Number of molecules processed %i, and saved: %i in %0.2f minutes' % (processed, saved, elapsed))
+
 
 
 def arg_parser():
@@ -171,6 +216,9 @@ Filter molecules.
                         help="Filter file.")
     filter.add_argument("--n-jobs", "-j", metavar="INT", default=1, type=int,
                         help="Number of CPU cores to use (optional, default: 1).",)
+    filter.add_argument("--chunk-size", "-c", metavar="INT", default=50000, type=int,
+                        help="Number of molecules to be held in RAM. 50k is a good balance between \
+                        speed and RAM usage (~1GB) (optional, default: 50000).",)
     filter.set_defaults(func=do_filter)
 
     return parser

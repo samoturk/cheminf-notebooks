@@ -2,32 +2,29 @@ allowed_atoms: ['C', 'H', 'O', 'N', 'S', 'P', 'F', 'Cl', 'Br', 'I']
 remove_salts: True
 
 properties:
-# Accepts any rdkit descriptor
-# Format: descriptor: min - max
+# Accepts any RDKit descriptor
+# Format:
+    #descriptor: min - max
     MolWt: 60 - 450
-#    TPSA
-#    FractionCSP3
+#    TPSA: 90 - 120
+#    FractionCSP3: 0 - 1
     HeavyAtomCount: 5 - 40
-#    NumAliphaticCarbocycles
-#    NumAliphaticHeterocycles
-#    NumAliphaticRings
-#    NumAromaticCarbocycles
-#    NumAromaticHeterocycles
-#    NumAromaticRings
+#    NumAromaticRings: 0 - 5
     NumHAcceptors: 0 - 10
     NumHDonors: 0 - 5
     NumHeteroatoms: 1 - 10
-#    NumRotatableBonds
-#    NumSaturatedCarbocycles
-#    NumSaturatedHeterocycles
-#    NumSaturatedRings
+#    NumRotatableBonds: 0 - 20
+#    NumSaturatedRings: 0 - 5
     RingCount: 0 - 5
     MolLogP: 0 - 4
-#    MolMR
-    FakeDesc: 0 - 1
 
-structure_filters:
-    - PAINS
+structure_filters: # Slow down the filtering a lot
+    - PAINS_A
+    - PAINS_B
+    - PAINS_C
+    - BRENK
+    - NIH
+    - ZINC
 
-custom_smarts_filters:
+custom_smarts_filters: # Not implemented yet
     - "[*]"
