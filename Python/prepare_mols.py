@@ -9,7 +9,6 @@ import argparse
 from rdkit import Chem
 from rdkit.Chem import Descriptors, PropertyMol, SaltRemover
 from rdkit.Chem.FilterCatalog import *
-from rdkit.Chem import AllChem
 import yaml
 from joblib import Parallel, delayed
 
@@ -24,7 +23,7 @@ class PropertyFilter(object):
         self.descriptors = self._init_descriptors(self.props)
         print('The following descriptors will be used for filtering:')
         for desc in self.descriptors:
-            print('    %s: %0.2f - %0.2f' %(desc, self.descriptors[desc][1], self.descriptors[desc][2]))
+            print('    %s: %0.2f - %0.2f' % (desc, self.descriptors[desc][1], self.descriptors[desc][2]))
         print('The following atoms are allowed: %s' %(', '.join(self.atoms)))
 
     def _init_descriptors(self, props):
@@ -48,7 +47,6 @@ class PropertyFilter(object):
         has a property not within desired range  """
         for desc in self.descriptors:
             desc = self.descriptors[desc]
-            #print([desc[1], float(desc[0](mol)), desc[2]])
             f = Descriptors.__getattribute__(desc[0])
             if desc[1] <= f(mol) <= desc[2]:
                 pass
@@ -89,6 +87,7 @@ class PropertyFilter(object):
 
 remover = SaltRemover.SaltRemover()
 
+
 def _prepare_catalog(filters):
     if 'structure_filters' not in filters:  # structure filters section missing
         return None, None
@@ -102,6 +101,7 @@ def _prepare_catalog(filters):
             catalog_names.append(f)
     catalog = FilterCatalog(params)
     return catalog, catalog_names
+
 
 def _parallel_filter(mol, prop_filter, filters):
     """Helper function for joblib jobs
@@ -155,10 +155,12 @@ def _get_supplier(file_name):
             suppl = _read_smi(mols_file)
     return suppl
 
+
 def _get_chunks(iterable, size):
     iterator = iter(iterable)
     for first in iterator:
         yield chain([first], islice(iterator, size - 1))
+
 
 def do_filter(args):
     suppl = _get_supplier(args.in_file)
@@ -178,7 +180,7 @@ def do_filter(args):
     print('Starting with filtering...')
     for chunk in chunks:
         result = Parallel(n_jobs=args.n_jobs, verbose=0)(delayed(_parallel_filter)(PropertyMol.PropertyMol(mol),
-                                                                                   prop_filter, filters) for mol in chunk)
+                                                                                    prop_filter, filters) for mol in chunk)
         for i, m in enumerate(result):
             if m is not None:
                 saved += 1
@@ -190,38 +192,41 @@ def do_filter(args):
     print('Number of molecules processed %i, and saved: %i in %0.2f minutes' % (processed, saved, elapsed))
 
 
-
 def arg_parser():
     parser = argparse.ArgumentParser(description="""\
 prepare_mols.py
 
-Removes salts by default unless "remove_salts: False" in filter.yaml
-
+Filter molecules based on allowed atoms, properties, and structural alerts;
+TODO: Generate 3D confs
 """, formatter_class=argparse.RawDescriptionHelpFormatter)
 
     subparsers = parser.add_subparsers(
         title="subcommands",
         help="prepare_mols $subcommand --help for details on sub-commands")
 
-    filter = subparsers.add_parser("filter",
-                                   description="""\
-Filter molecules.
+    filter_ = subparsers.add_parser("filter",
+                                    description="""\
+Filter molecules based on allowed atoms, properties, and structural alerts.
+
+Note: Removes salts by default unless "remove_salts: False" in filter.yaml
+
 """, formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    filter.add_argument("--in-file", "-i", metavar='FILE', required=True, type=str,
-                        help="Input SDF, SMI, ISM (can be gzipped).")
-    filter.add_argument("--out-file", "-o", metavar='FILE', required=True, type=str,
-                        help="Output SDF.")
-    filter.add_argument("--filter-file", "-f", metavar='FILE', required=True, type=str,
-                        help="Filter file.")
-    filter.add_argument("--n-jobs", "-j", metavar="INT", default=1, type=int,
-                        help="Number of CPU cores to use (optional, default: 1).",)
-    filter.add_argument("--chunk-size", "-c", metavar="INT", default=50000, type=int,
-                        help="Number of molecules to be held in RAM. 50k is a good balance between \
-                        speed and RAM usage (~1GB) (optional, default: 50000).",)
-    filter.set_defaults(func=do_filter)
+    filter_.add_argument("--in-file", "-i", metavar='FILE', required=True, type=str,
+                         help="Input SDF, SMI, ISM (can be gzipped).")
+    filter_.add_argument("--out-file", "-o", metavar='FILE', required=True, type=str,
+                         help="Output SDF.")
+    filter_.add_argument("--filter-file", "-f", metavar='FILE', required=True, type=str,
+                         help="Filter file.")
+    filter_.add_argument("--n-jobs", "-j", metavar="INT", default=1, type=int,
+                         help="Number of CPU cores to use (optional, default: 1).",)
+    filter_.add_argument("--chunk-size", "-c", metavar="INT", default=50000, type=int,
+                         help="Number of molecules to be held in RAM. 50k is a good balance between \
+                         speed and RAM usage (~1GB) (optional, default: 50000).",)
+    filter_.set_defaults(func=do_filter)
 
     return parser
+
 
 def run():
     parser = arg_parser()

@@ -26,5 +26,3 @@ structure_filters: # Slow down the filtering a lot
     - NIH
     - ZINC
 
-custom_smarts_filters: # Not implemented yet
-    - "[*]"
