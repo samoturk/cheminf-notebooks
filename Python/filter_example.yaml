@@ -1,3 +1,6 @@
+allowed_atoms: ['C', 'H', 'O', 'N', 'S', 'P', 'F', 'Cl', 'Br', 'I']
+remove_salts: True
+
 properties:
 # Accepts any rdkit descriptor
 # Format: descriptor: min - max

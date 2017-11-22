@@ -6,8 +6,7 @@ __license__ = "BSD 3-clause"
 import sys
 import argparse
 from rdkit import Chem
-from rdkit.Chem import Descriptors
-from rdkit.Chem import PropertyMol
+from rdkit.Chem import Descriptors, PropertyMol, SaltRemover
 from rdkit.Chem import AllChem
 import yaml
 from joblib import Parallel, delayed
@@ -16,12 +15,14 @@ from joblib import Parallel, delayed
 class PropertyFilter(object):
     """PropertyFilter class partially parses config and initiates relevant descriptors"""
 
-    def __init__(self, properties):
+    def __init__(self, properties, atoms):
         self.props = properties
+        self.atoms = atoms
         self.descriptors = self._init_descriptors(self.props)
         print('Following descriptors will be used for filtering:')
         for desc in self.descriptors:
             print('%s: %f - %f' %(desc, self.descriptors[desc][1], self.descriptors[desc][2]))
+        print('Following atoms are allowed: %s' %(', '.join(self.atoms)))
 
     def _init_descriptors(self, props):
         all_descs = dict(Descriptors._descList)
@@ -40,7 +41,7 @@ class PropertyFilter(object):
                 print('%s not recognized as RDKit descriptor.' % prop)
         return descs
 
-    def filter_mol(self, mol):
+    def filter_props(self, mol):
         """Quickly filters mols, doesn't save any calculated values and moves to the next one as soon as a molecules
         has a property not within desired range  """
         for desc in self.descriptors:
@@ -54,12 +55,40 @@ class PropertyFilter(object):
         # If all pass
         return True
 
-def _parallel_filter(mol, prop_filter):
+    def check_atoms(self, mol):
+        """Check if mol only as allowed atoms"""
+        atoms = []
+        for a in mol.GetAtoms():
+            atoms.append(a.GetSymbol())
+        for a in set(atoms):
+            if a not in self.atoms:
+                return False
+        # If all passes
+        return True
+
+    def filter_mol(self, mol):
+        if self.filter_props(mol) & self.check_atoms(mol):
+            return True
+        else:
+            return False
+
+
+remover = SaltRemover.SaltRemover()
+
+
+def _parallel_filter(mol, prop_filter, filters):
     """Helper function for joblib jobs
     """
     if mol is not None:
         #smiles = Chem.MolToSmiles(mol)
         #mol = Chem.MolFromSmiles(smiles)
+
+        # Remove salts by default except explicitly requested not to
+        if 'remove_salts' in filters:
+            if filters['remove_salts'] is False:
+                pass
+        else:
+            mol = remover.StripMol(mol)
         if prop_filter.filter_mol(mol):
             return mol
 
@@ -106,18 +135,23 @@ def _get_supplier(file_name):
 def do_filter(args):
     suppl = _get_supplier(args.in_file)
     filters = yaml.load(open(args.filter_file))
-    prop_filter = PropertyFilter(filters['properties'])
-    result = Parallel(n_jobs=args.n_jobs, verbose=1)(delayed(_parallel_filter)(PropertyMol.PropertyMol(mol), prop_filter) for mol in suppl)
+    prop_filter = PropertyFilter(filters['properties'], filters['allowed_atoms'])
+    result = Parallel(n_jobs=args.n_jobs, verbose=1)(delayed(_parallel_filter)(PropertyMol.PropertyMol(mol),
+                                                                               prop_filter, filters) for mol in suppl)
     print(len(result))
     w = Chem.SDWriter(args.out_file)
     for m in result:
-        w.write(m)
+        if m is not None:
+            w.write(m)
     w.close()
 
 
 def arg_parser():
     parser = argparse.ArgumentParser(description="""\
 prepare_mols.py
+
+Removes salts by default unless "remove_salts: False" in filter.yaml
+
 """, formatter_class=argparse.RawDescriptionHelpFormatter)
 
     subparsers = parser.add_subparsers(
