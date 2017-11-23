@@ -167,8 +167,11 @@ def _parallel_3d(mol):
     """Helper function for joblib jobs
     """
     if mol is not None:
+        name = mol.GetProp('_Name')
         mol = Chem.AddHs(mol)
         AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+        mol = PropertyMol.PropertyMol(mol) # making sure properties are picklable
+        mol.SetProp('_Name', name)
         return mol
 
 def do_filter(args):
