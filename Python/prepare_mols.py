@@ -7,7 +7,7 @@ import timeit
 from itertools import chain, islice
 import argparse
 from rdkit import Chem
-from rdkit.Chem import Descriptors, PropertyMol, SaltRemover
+from rdkit.Chem import Descriptors, PropertyMol, SaltRemover, AllChem
 from rdkit.Chem.FilterCatalog import *
 import yaml
 from joblib import Parallel, delayed
@@ -111,8 +111,8 @@ def _parallel_filter(mol, prop_filter, filters):
         if 'remove_salts' in filters:
             if filters['remove_salts'] is False:
                 pass
-        else:
-            mol = remover.StripMol(mol)
+            else:
+                mol = remover.StripMol(mol)
         if prop_filter.filter_mol(mol):
             return mol
 
@@ -122,9 +122,11 @@ def _read_smi(file_name):
         line = file_name.readline()
         if not line:
             break
-        mol = Chem.MolFromSmiles(line.split('\t')[0])
+        line = line.split('\t')
+        mol = Chem.MolFromSmiles(line[0])
         if mol is not None:
-            mol.SetProp('_Name', line.split('\t')[1])
+            if len(line) > 1:
+                mol.SetProp('_Name', line[1])
             yield mol
 
 
@@ -161,6 +163,13 @@ def _get_chunks(iterable, size):
     for first in iterator:
         yield chain([first], islice(iterator, size - 1))
 
+def _parallel_3d(mol):
+    """Helper function for joblib jobs
+    """
+    if mol is not None:
+        mol = Chem.AddHs(mol)
+        AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+        return mol
 
 def do_filter(args):
     suppl = _get_supplier(args.in_file)
@@ -187,9 +196,33 @@ def do_filter(args):
                 w.write(m)
         elapsed = (timeit.default_timer() - start)/60
         processed += len(result)
-        print('Processed: %i       | elapsed %0.2f minutes   \r' % (processed, elapsed), end='\r')
+        print('Processed: %i       | elapsed %0.2f minutes' % (processed, elapsed))
     w.close()
     print('Number of molecules processed %i, and saved: %i in %0.2f minutes' % (processed, saved, elapsed))
+
+
+def do_3d(args):
+    suppl = _get_supplier(args.in_file)
+    # Processing in chunks so we don't consume all memory
+    chunk_size = args.chunk_size
+    chunks = _get_chunks(suppl, chunk_size)
+    w = Chem.SDWriter(args.out_file)
+    processed = 0
+    saved = 0
+    start = timeit.default_timer()
+    print('Starting with generating conformations...')
+    for chunk in chunks:
+        result = Parallel(n_jobs=args.n_jobs)(delayed(_parallel_3d)(PropertyMol.PropertyMol(mol)) for mol in chunk)
+        for i, m in enumerate(result):
+            if m is not None:
+                saved += 1
+                w.write(m)
+        elapsed = (timeit.default_timer() - start) / 60
+        processed += len(result)
+        print('Processed: %i       | elapsed %0.2f minutes' % (processed, elapsed))
+    w.close()
+    print('Number of molecules processed %i, and saved: %i in %0.2f minutes' % (processed, saved, elapsed))
+
 
 
 def arg_parser():
@@ -222,8 +255,26 @@ Note: Removes salts by default unless "remove_salts: False" in filter.yaml
                          help="Number of CPU cores to use (optional, default: 1).",)
     filter_.add_argument("--chunk-size", "-c", metavar="INT", default=50000, type=int,
                          help="Number of molecules to be held in RAM. 50k is a good balance between \
-                         speed and RAM usage (~1GB) (optional, default: 50000).",)
+                         speed and RAM usage (~1GB). Note that the progress is reported only when a \
+                         a chunk is processed (optional, default: 50000).",)
     filter_.set_defaults(func=do_filter)
+
+    gen3d = subparsers.add_parser("gen3d",
+                                    description="""\
+    Generate 3D conformations using ETKDG method.
+
+    """, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    gen3d.add_argument("--in-file", "-i", metavar='FILE', required=True, type=str,
+                         help="Input SDF, SMI, ISM (can be gzipped).")
+    gen3d.add_argument("--out-file", "-o", metavar='FILE', required=True, type=str,
+                         help="Output SDF.")
+    gen3d.add_argument("--n-jobs", "-j", metavar="INT", default=1, type=int,
+                         help="Number of CPU cores to use (optional, default: 1).", )
+    gen3d.add_argument("--chunk-size", "-c", metavar="INT", default=1000, type=int,
+                         help="Number of molecules to be held in RAM. Note that the progress is \
+                         reported only when a chunk is processed (optional, default: 1000).", )
+    gen3d.set_defaults(func=do_3d)
 
     return parser
 
