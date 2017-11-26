@@ -108,12 +108,15 @@ def _parallel_filter(mol, prop_filter, filters):
     """
     if mol is not None:
         # Remove salts by default except explicitly requested not to
+        name = mol.GetProp('_Name')
         if 'remove_salts' in filters:
             if filters['remove_salts'] is False:
                 pass
             else:
                 mol = remover.StripMol(mol)
         if prop_filter.filter_mol(mol):
+            mol = PropertyMol.PropertyMol(mol)
+            mol.SetProp('_Name', name)
             return mol
 
 
