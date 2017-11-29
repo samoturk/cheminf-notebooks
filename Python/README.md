@@ -1,5 +1,5 @@
 # Collection of useful cheminformatics scripts
-### anymol2vina.py (Python2)
+### anymol2vina.py (Python3)
 Script that automatically docks molecules with Autodock Vina.
 
 ### PCA-k-means.py (Python3)

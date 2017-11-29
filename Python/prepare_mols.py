@@ -125,7 +125,7 @@ def _read_smi(file_name):
         line = file_name.readline()
         if not line:
             break
-        line = line.split('\t')
+        line = line.split()
         mol = Chem.MolFromSmiles(line[0])
         if mol is not None:
             if len(line) > 1:
